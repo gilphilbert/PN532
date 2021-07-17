@@ -17,19 +17,7 @@ PN532_SPI::PN532_SPI(SPIClass &spi, uint8_t ss)
 void PN532_SPI::begin()
 {
     pinMode(_ss, OUTPUT);
-
     _spi->begin();
-    _spi->setDataMode(SPI_MODE0); // PN532 only supports mode0
-    _spi->setBitOrder(LSBFIRST);
-#if defined __SAM3X8E__
-    /** DUE spi library does not support SPI_CLOCK_DIV8 macro */
-    _spi->setClockDivider(42); // set clock 2MHz(max: 5MHz)
-#elif defined __SAMD21G18A__
-    /** M0 spi library does not support SPI_CLOCK_DIV8 macro */
-    _spi->setClockDivider(24); // set clock 2MHz(max: 5MHz)
-#else
-    _spi->setClockDivider(SPI_CLOCK_DIV8); // set clock 2MHz(max: 5MHz)
-#endif
 }
 
 void PN532_SPI::wakeup()
@@ -41,6 +29,7 @@ void PN532_SPI::wakeup()
 
 int8_t PN532_SPI::writeCommand(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8_t blen)
 {
+    _spi->beginTransaction(SPISettings(2000000UL, LSBFIRST, SPI_MODE0));
     command = header[0];
     writeFrame(header, hlen, body, blen);
 
@@ -52,19 +41,23 @@ int8_t PN532_SPI::writeCommand(const uint8_t *header, uint8_t hlen, const uint8_
         if (0 == timeout)
         {
             DMSG("Time out when waiting for ACK\n");
+            _spi->endTransaction();
             return -2;
         }
     }
     if (readAckFrame())
     {
         DMSG("Invalid ACK\n");
+            _spi->endTransaction();
         return PN532_INVALID_ACK;
     }
+    _spi->endTransaction();
     return 0;
 }
 
 int16_t PN532_SPI::readResponse(uint8_t buf[], uint8_t len, uint16_t timeout)
 {
+    _spi->beginTransaction(SPISettings(2000000UL, LSBFIRST, SPI_MODE0));
     uint16_t time = 0;
     while (!isReady())
     {
@@ -72,6 +65,7 @@ int16_t PN532_SPI::readResponse(uint8_t buf[], uint8_t len, uint16_t timeout)
         time++;
         if (time > timeout)
         {
+            _spi->endTransaction();
             return PN532_TIMEOUT;
         }
     }
@@ -149,6 +143,7 @@ int16_t PN532_SPI::readResponse(uint8_t buf[], uint8_t len, uint16_t timeout)
 
     digitalWrite(_ss, HIGH);
 
+    _spi->endTransaction();
     return result;
 }
 
